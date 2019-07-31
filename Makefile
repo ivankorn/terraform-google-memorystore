@@ -16,16 +16,24 @@
 SHELL := /usr/bin/env bash
 
 # Docker build config variables
+CREDENTIALS_PATH 			?= /cft/workdir/credentials.json
+DOCKER_ORG 				:= gcr.io/cloud-foundation-cicd
+DOCKER_TAG_BASE_KITCHEN_TERRAFORM 	?= 2.3.0
+DOCKER_REPO_BASE_KITCHEN_TERRAFORM 	:= ${DOCKER_ORG}/cft/kitchen-terraform:${DOCKER_TAG_BASE_KITCHEN_TERRAFORM}
+
+# Below is left for building docker images locally only
+# Which currently doesn't work. There is an issue to address that
+# https://github.com/terraform-google-modules/terraform-google-memorystore/issues/7
 BUILD_TERRAFORM_VERSION ?= 0.11.10
 BUILD_CLOUD_SDK_VERSION ?= 216.0.0
 BUILD_PROVIDER_GOOGLE_VERSION ?= 1.19.1
 BUILD_PROVIDER_GSUITE_VERSION ?= 0.1.10
-DOCKER_IMAGE_TERRAFORM := cftk/terraform
+DOCKER_IMAGE_TERRAFORM := ${DOCKER_ORG}/cft/terraform
 DOCKER_TAG_TERRAFORM ?= ${BUILD_TERRAFORM_VERSION}_${BUILD_CLOUD_SDK_VERSION}_${BUILD_PROVIDER_GOOGLE_VERSION}_${BUILD_PROVIDER_GSUITE_VERSION}
 BUILD_RUBY_VERSION ?= 2.5.3
-DOCKER_IMAGE_KITCHEN_TERRAFORM := cftk/kitchen_terraform
+DOCKER_IMAGE_KITCHEN_TERRAFORM := ${DOCKER_ORG}/cft/kitchen-terraform
 DOCKER_TAG_KITCHEN_TERRAFORM ?= ${BUILD_TERRAFORM_VERSION}_${BUILD_CLOUD_SDK_VERSION}_${BUILD_PROVIDER_GOOGLE_VERSION}_${BUILD_PROVIDER_GSUITE_VERSION}
-
+## -- Read the comment above
 
 all: check_shell check_python check_golang check_terraform check_docker check_base_files test_check_headers check_headers check_trailing_whitespace generate_docs ## Run all linters and update documentation
 
@@ -45,12 +53,12 @@ check_golang: ## Lint Go source files
 	@source test/make.sh && golang
 
 .PHONY: check_terraform
-check_terraform:
-	@source ## Lint Terraform source files
+check_terraform: ## Lint Terraform source files
+	@source test/make.sh && check_terraform
 
 .PHONY: check_docker
 check_docker: ## Lint Dockerfiles
-	@source test/make.sh && docker
+	@source test/make.sh && check_docker
 
 .PHONY: check_base_files
 check_base_files:
@@ -67,12 +75,11 @@ check_trailing_whitespace:
 .PHONY: test_check_headers
 test_check_headers:
 	@echo "Testing the validity of the header check"
-	@python test/test_verify_boilerplate.py
+	@source test/make.sh && check_headers
 
 .PHONY: check_headers
 check_headers: ## Check that source files have appropriate boilerplate
-	@echo "Checking file headers"
-	@python test/verify_boilerplate.py
+	@source test/make.sh && check_headers
 
 # Integration tests
 .PHONY: test_integration
@@ -114,36 +121,51 @@ docker_build_kitchen_terraform:
 .PHONY: docker_run
 docker_run: ## Launch a shell within the Docker test environment
 	docker run --rm -it \
-		-v $(CURDIR):/cftk/workdir \
-		${DOCKER_IMAGE_KITCHEN_TERRAFORM}:${DOCKER_TAG_KITCHEN_TERRAFORM} \
+		-e SERVICE_ACCOUNT_JSON \
+		-e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${CREDENTIALS_PATH} \
+		-e GOOGLE_APPLICATION_CREDENTIALS=${CREDENTIALS_PATH} \
+		-v $(CURDIR):/cft/workdir \
+		${DOCKER_REPO_BASE_KITCHEN_TERRAFORM} \
 		/bin/bash
 
 .PHONY: docker_create
 docker_create: ## Run `kitchen create` within the Docker test environment
 	docker run --rm -it \
-		-v $(CURDIR):/cftk/workdir \
-		${DOCKER_IMAGE_KITCHEN_TERRAFORM}:${DOCKER_TAG_KITCHEN_TERRAFORM} \
+		-e SERVICE_ACCOUNT_JSON \
+		-e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${CREDENTIALS_PATH} \
+		-e GOOGLE_APPLICATION_CREDENTIALS=${CREDENTIALS_PATH} \
+		-v $(CURDIR):/cft/workdir \
+		${DOCKER_REPO_BASE_KITCHEN_TERRAFORM} \
 		/bin/bash -c "kitchen create"
 
 .PHONY: docker_converge
 docker_converge: ## Run `kitchen converge` within the Docker test environment
 	docker run --rm -it \
-		-v $(CURDIR):/cftk/workdir \
-		${DOCKER_IMAGE_KITCHEN_TERRAFORM}:${DOCKER_TAG_KITCHEN_TERRAFORM} \
+		-e SERVICE_ACCOUNT_JSON \
+		-e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${CREDENTIALS_PATH} \
+		-e GOOGLE_APPLICATION_CREDENTIALS=${CREDENTIALS_PATH} \
+		-v $(CURDIR):/cft/workdir \
+		${DOCKER_REPO_BASE_KITCHEN_TERRAFORM} \
 		/bin/bash -c "kitchen converge && kitchen converge"
 
 .PHONY: docker_verify
 docker_verify: ## Run `kitchen verify` within the Docker test environment
 	docker run --rm -it \
-		-v $(CURDIR):/cftk/workdir \
-		${DOCKER_IMAGE_KITCHEN_TERRAFORM}:${DOCKER_TAG_KITCHEN_TERRAFORM} \
+		-e SERVICE_ACCOUNT_JSON \
+		-e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${CREDENTIALS_PATH} \
+		-e GOOGLE_APPLICATION_CREDENTIALS=${CREDENTIALS_PATH} \
+		-v $(CURDIR):/cft/workdir \
+		${DOCKER_REPO_BASE_KITCHEN_TERRAFORM} \
 		/bin/bash -c "kitchen verify"
 
 .PHONY: docker_destroy
 docker_destroy: ## Run `kitchen destroy` within the Docker test environment
 	docker run --rm -it \
-		-v $(CURDIR):/cftk/workdir \
-		${DOCKER_IMAGE_KITCHEN_TERRAFORM}:${DOCKER_TAG_KITCHEN_TERRAFORM} \
+		-e SERVICE_ACCOUNT_JSON \
+		-e CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE=${CREDENTIALS_PATH} \
+		-e GOOGLE_APPLICATION_CREDENTIALS=${CREDENTIALS_PATH} \
+		-v $(CURDIR):/cft/workdir \
+		${DOCKER_REPO_BASE_KITCHEN_TERRAFORM} \
 		/bin/bash -c "kitchen destroy"
 
 .PHONY: test_integration_docker
